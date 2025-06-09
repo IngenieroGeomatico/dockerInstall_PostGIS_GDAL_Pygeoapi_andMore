@@ -1,0 +1,10 @@
+
+services:
+  pygeoapi-installer-git:
+    image: dockerfile_pygeoapi_from_git
+    container_name: pygeoapi_installer_git_container
+    ports:
+      - "5000:5000"
+    command: sh -c 'sh ./start.sh && tail -f /dev/null'
+    volumes:
+      - ./conf/pygeoapi-config.yml:/app/pygeoapi/pygeoapi-config.yml

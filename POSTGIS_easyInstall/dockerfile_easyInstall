@@ -1,0 +1,79 @@
+# Usar una imagen base de Ubuntu
+FROM ubuntu:22.04
+
+# Establecer variables de entorno para evitar interacciones durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    libpq-dev \
+    postgresql-14-postgis-3 \
+    postgresql-client-common \
+    postgresql-client \
+    postgresql-contrib \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear entorno virtual de Python
+WORKDIR /app
+RUN python3 -m venv ./pgis_python_env
+ENV PATH="/app/pgis_python_env/bin:$PATH"
+
+# Instalar la librería psycopg2-binary en el entorno virtual
+RUN /app/pgis_python_env/bin/pip install --no-cache-dir psycopg2-binary
+
+# Configurar PostgreSQL
+ENV PGDATA=/var/lib/postgresql/data
+USER postgres
+WORKDIR /var/lib/postgresql
+
+RUN mkdir -p /var/lib/postgresql/data && chown -R postgres:postgres /var/lib/postgresql
+RUN /usr/lib/postgresql/14/bin/initdb -D /var/lib/postgresql/data
+
+
+USER root
+
+WORKDIR /var/lib/postgresql/data
+COPY ./conf/data/postgresql.conf ./postgresql.conf 
+COPY ./conf/data/pg_hba.conf ./pg_hba.conf 
+RUN chown -R postgres:postgres ./postgresql.conf && chown -R postgres:postgres ./pg_hba.conf
+RUN chmod 600 ./postgresql.conf 
+RUN chmod 600 ./pg_hba.conf
+
+
+
+WORKDIR /etc/postgresql/14/main/
+COPY ./conf/main/postgresql.conf ./postgresql.conf 
+COPY ./conf/main/pg_hba.conf ./pg_hba.conf 
+RUN chown -R postgres:postgres ./postgresql.conf && chown -R postgres:postgres ./pg_hba.conf
+RUN chmod 644 ./postgresql.conf 
+RUN chmod 640 ./pg_hba.conf
+
+# iniciar PG
+USER postgres
+WORKDIR /var/lib/postgresql
+
+
+# Copiar el archivo de Python al contenedor
+USER root
+WORKDIR /app
+COPY test/checkPOSTGIS.py /app/
+COPY conf/start.sh /app/
+
+
+USER postgres
+RUN /usr/lib/postgresql/14/bin/pg_ctl -D /var/lib/postgresql/data -l /var/lib/postgresql/logfile start &&\
+    psql -c "SELECT 1;" &&\
+    psql -c "CREATE USER usuario WITH PASSWORD 'pass';" && \
+    psql -c "CREATE DATABASE postgis OWNER usuario;" &&\
+    psql -d postgis -c "CREATE EXTENSION postgis;" && \
+    psql -d postgis -c "CREATE EXTENSION postgis_topology;" ||\
+    (cat /var/lib/postgresql/logfile && exit 1)
+
+# Copiamos los datos iniciales a una ruta de respaldo dentro de la imagen
+USER root
+RUN cp -R /var/lib/postgresql/data /var/lib/postgresql/data_backup && chown -R postgres:postgres /var/lib/postgresql/data_backup
+USER postgres

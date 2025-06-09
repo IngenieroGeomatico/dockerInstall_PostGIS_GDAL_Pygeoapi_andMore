@@ -1,0 +1,21 @@
+services:
+  postgis-installer-from_image:
+    user: "root" 
+    build:
+      context: .
+      dockerfile: dockerfile_fromSource
+      args:
+        PG_Version: "17-3.5" 
+    container_name: postgis_installer_container_fromSource
+    environment:
+      PG_Version: "17-3.5"
+    ports:
+      - "5432:5432"
+    
+    command: sh -c 'sh ./start.sh && 
+                    python3 checkPOSTGIS.py &&
+                    echo "PostgreSQL está en ejecución. Siguiendo los logs..." &&
+                    tail -f /var/lib/postgresql/logfile'
+
+    volumes:
+      - ./postgis_data:/var/lib/postgresql/data:volume-nocopy # Persistencia de datos

@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  gdal-installer-dockerfile_from_source:
+    build:
+      context: .
+      dockerfile: dockerfile_fromSource
+    container_name: gdal_installer_container_from_source
+    volumes:
+      - .:/app  # Montar el directorio actual en el contenedor
+    command: ["python3", "checkGDAL.py"]

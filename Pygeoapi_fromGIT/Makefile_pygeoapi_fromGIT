@@ -1,0 +1,8 @@
+build-base:
+	docker build -t gdal_base -f ../GDAL_easyInstall/dockerfile_easyInstall .
+
+build-app: build-base
+	docker build -t dockerfile_pygeoapi_from_git -f dockerfile_Pygeoapi_fromGIT .
+
+up: build-app
+	docker compose -f docker-compose_dockerfile_Pygeoapi_fromGIT.yml up --build --remove-orphans

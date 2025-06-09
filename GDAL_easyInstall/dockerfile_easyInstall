@@ -1,0 +1,42 @@
+# Usar una imagen base de Ubuntu Server
+FROM ubuntu:22.04
+
+# Establecer variables de entorno para evitar interacciones durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Definir un argumento para la versión de GDAL
+ENV version_NUMPY=2.2.4 
+
+# Actualizar los paquetes e instalar dependencias necesarias
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    build-essential \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    wget \
+    curl \
+    ca-certificates \
+    libgdal-dev \
+    gdal-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Verificar la instalación de GDAL
+RUN gdalinfo --version 
+RUN echo  gdalinfo --version 
+
+# Vrear entorno virtual de Python
+RUN python3 -m venv ./gda_python_env
+ENV PATH="./gda_python_env/bin:$PATH"
+
+
+# Instalar la librería Python de GDAL
+RUN pip3 install --no-cache-dir   numpy==$version_NUMPY wheel setuptools>=67
+RUN pip3 install --no-cache-dir  gdal[numpy]=="$(gdal-config --version).*" --no-build-isolation
+
+# Copiar el archivo de Python al contenedor
+WORKDIR /app
+COPY ./checkGDAL.py /app/
+
+# Comando por defecto para ejecutar el archivo de Python
+CMD ["python3", "checkGDAL.py"]

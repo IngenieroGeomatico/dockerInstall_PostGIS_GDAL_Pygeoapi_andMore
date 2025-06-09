@@ -1,0 +1,42 @@
+FROM gdal_base
+
+# Versión en pip de pygeoapi
+ENV version_pygeoapi=0.20.0
+
+# Establecer variables de entorno para evitar interacciones durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Instalar wget y unzip si no están instalados
+RUN apt-get update && apt-get install -y wget unzip
+
+# Descargar y descomprimir el código fuente de pygeoapi
+RUN wget https://github.com/geopython/pygeoapi/archive/refs/tags/${version_pygeoapi}.zip -O pygeoapi.zip \
+    && unzip pygeoapi.zip \
+    && mv pygeoapi-${version_pygeoapi} pygeoapi \
+    && rm pygeoapi.zip
+
+WORKDIR /app/pygeoapi
+
+RUN pip3 install --no-cache-dir --upgrade pip
+RUN (python3 -c "import numpy; exit(0) if tuple(map(int, numpy.__version__.split('.')[:2])) >= (1,24) else exit(1)" \
+     || pip3 install --no-cache-dir --force-reinstall 'numpy>=1.24')
+
+RUN pip3 install --no-cache-dir --ignore-installed -r requirements-django.txt
+
+RUN python3 setup.py install
+
+ENV PYGEOAPI_CONFIG=./pygeoapi-config.yml
+ENV PYGEOAPI_OPENAPI=./example-openapi.yml
+
+RUN pygeoapi openapi generate $PYGEOAPI_CONFIG --output-file $PYGEOAPI_OPENAPI
+
+WORKDIR /app
+COPY conf/start.sh /app/
+
+# RUN pygeoapi serve
+
+# CMD ["pygeoapi", "serve"]
+CMD ["tail", "-f", "/dev/null"]
+

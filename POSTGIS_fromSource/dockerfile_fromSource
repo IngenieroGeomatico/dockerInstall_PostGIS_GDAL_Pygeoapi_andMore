@@ -1,0 +1,131 @@
+# Usar una imagen base de Ubuntu
+FROM ubuntu:22.04
+
+
+# Establecer variables de entorno para evitar interacciones durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PG_Version=17.5
+ENV POSTGIS_Version=3.5.2
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+  build-essential \
+  wget \
+  libreadline-dev \
+  zlib1g-dev \
+  flex \
+  bison \
+  libxml2-dev \
+  libxslt-dev \
+  libssl-dev \
+  libgeos-dev \
+  libproj-dev \
+  libgdal-dev \
+  libjson-c-dev \
+  ca-certificates \
+  libprotobuf-c-dev \
+  protobuf-c-compiler \
+  libgmp-dev \
+  libpcre3-dev \
+  libpam0g-dev \
+  libedit-dev \
+  curl \
+  git \
+  cmake \
+  libspatialindex-dev \
+  python3-dev \
+  python3-pip \
+  python3-venv \
+  && rm -rf /var/lib/apt/lists/*
+
+# Crear usuario postgres
+RUN useradd -ms /bin/bash postgres
+
+# Compilar PostgreSQL
+WORKDIR /usr/local/src
+RUN wget https://ftp.postgresql.org/pub/source/v${PG_Version}/postgresql-${PG_Version}.tar.gz && \
+    tar xzf postgresql-${PG_Version}.tar.gz && \
+    cd postgresql-${PG_Version} && \
+    ./configure --prefix=/var/lib/postgresql/ && \
+    make -j$(nproc) && \
+    make install
+
+ENV PATH="/var/lib/postgresql/bin:$PATH"
+
+
+# Crear los directorios para PostgreSQL y ajustar permisos
+RUN mkdir -p /var/lib/postgresql/data && \
+    chown -R postgres:postgres /var/lib/postgresql/
+
+
+# Cambiar a usuario postgres para inicializar la base de datos
+USER postgres
+RUN /var/lib/postgresql/bin/initdb -D /var/lib/postgresql/data
+
+# Cambiar de nuevo a root para instalar PostGIS
+USER root
+
+# Compilar PostGIS
+WORKDIR /usr/local/src
+RUN wget https://download.osgeo.org/postgis/source/postgis-${POSTGIS_Version}.tar.gz && \
+    tar xzf postgis-${POSTGIS_Version}.tar.gz && \
+    cd postgis-${POSTGIS_Version} && \
+    ./configure --with-pgconfig=/var/lib/postgresql/bin/pg_config && \
+    make -j$(nproc) && \
+    make install
+
+
+
+# Crear entorno virtual de Python
+WORKDIR /app
+RUN python3 -m venv ./pgis_python_env
+ENV PATH="/app/pgis_python_env/bin:$PATH"
+
+# Instalar la librería psycopg2-binary en el entorno virtual
+RUN /app/pgis_python_env/bin/pip install --no-cache-dir psycopg2-binary
+
+# Configurar PostgreSQL
+ENV PGDATA=/var/lib/postgresql/data
+
+
+WORKDIR /var/lib/postgresql/data
+COPY ./conf/data/postgresql.conf ./postgresql.conf 
+COPY ./conf/data/pg_hba.conf ./pg_hba.conf 
+RUN chown -R postgres:postgres ./postgresql.conf && chown -R postgres:postgres ./pg_hba.conf
+RUN chmod 600 ./postgresql.conf 
+RUN chmod 600 ./pg_hba.conf
+
+
+
+WORKDIR /etc/postgresql/$(echo "${PG_Version}" | cut -d'.' -f1)/main/
+COPY ./conf/main/postgresql.conf ./postgresql.conf 
+COPY ./conf/main/pg_hba.conf ./pg_hba.conf 
+RUN chown -R postgres:postgres ./postgresql.conf && chown -R postgres:postgres ./pg_hba.conf
+RUN chmod 644 ./postgresql.conf 
+RUN chmod 640 ./pg_hba.conf
+
+# iniciar PG
+USER postgres
+WORKDIR /var/lib/postgresql
+
+
+# Copiar el archivo de Python al contenedor
+USER root
+WORKDIR /app
+COPY test/checkPOSTGIS.py /app/
+COPY conf/start.sh /app/
+
+
+USER postgres
+RUN pg_ctl -D /var/lib/postgresql/data -l /var/lib/postgresql/logfile start && \
+    psql -c "SELECT 1;" && \
+    psql -c "CREATE USER usuario WITH PASSWORD 'pass';" && \
+    psql -c "CREATE DATABASE postgis OWNER usuario;" && \
+    psql -d postgis -c "CREATE EXTENSION postgis;" && \
+    psql -d postgis -c "CREATE EXTENSION postgis_topology;" || \
+    (cat /var/lib/postgresql/logfile && exit 1)
+
+# Copiamos los datos iniciales a una ruta de respaldo dentro de la imagen
+USER root
+RUN cp -R /var/lib/postgresql/data /var/lib/postgresql/data_backup && chown -R postgres:postgres /var/lib/postgresql/data_backup
+USER postgres

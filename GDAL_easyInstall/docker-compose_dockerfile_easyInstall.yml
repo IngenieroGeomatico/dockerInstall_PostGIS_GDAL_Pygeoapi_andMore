@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  gdal-installer-easy_install:
+    build:
+      context: .
+      dockerfile: dockerfile_easyInstall
+    container_name: gdal_installer_container_easyInstall
+    volumes:
+      - .:/app  # Montar el directorio actual en el contenedor
+    command: ["python3", "checkGDAL.py"]
