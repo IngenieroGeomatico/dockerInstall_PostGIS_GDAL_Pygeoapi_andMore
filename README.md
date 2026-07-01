@@ -118,4 +118,4 @@ Acceder en [http://localhost:5000](http://localhost:5000).
 
 - Proyecto educativo / en desarrollo.
 - No usar en producción sin cambiar credenciales y certificados SSL.
-- `Pygeoapi_fromGIT_custom/` está vacío — preparado para personalización futura.
+- `Pygeoapi_fromGIT_custom/` está vacío.
